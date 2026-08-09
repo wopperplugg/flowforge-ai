@@ -1,0 +1,30 @@
+services:
+  ai-postgres:
+    image: pgvector/pgvector:pg17
+    container_name: flowforge-ai-postgres
+
+    environment:
+      POSTGRES_DB: flowforgeai
+      POSTGRES_USER: flowforgeai
+      POSTGRES_PASSWORD: flowforgeai
+
+    ports:
+      - "5434:5432"
+
+    volumes:
+      - ai_postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U flowforgeai -d flowforgeai",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+    restart: unless-stopped
+
+volumes:
+  ai_postgres_data:
