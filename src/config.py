@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field, PostgresDsn, SecretStr, computed_field
+from pydantic import AmqpDsn, Field, PostgresDsn, SecretStr, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,6 +39,12 @@ class Settings(BaseSettings):
         alias="POSTGRES_PASSWORD",
     )
 
+    rabbitmq_host: str = "localhost"
+    rabbitmq_port: int = Field(default=5672, ge=1, le=65535)
+    rabbitmq_user: str = "guest"
+    rabbitmq_password: SecretStr = SecretStr("guest")
+    rabbitmq_vhost: str = "/"    
+
     ollama_base_url: str = "http://localhost:11434"
     embedding_model: str = "nomic-embed-text"
     llm_model: str = "qwen3:8b"
@@ -55,6 +61,17 @@ class Settings(BaseSettings):
             path=self.postgres_db,
         )
 
+    @computed_field
+    @property
+    def rabbitmq_dsn(self) -> AmqpDsn:
+        return AmqpDsn.build(
+            scheme="amqp",
+            username=self.rabbitmq_user,
+            password=self.rabbitmq_password.get_secret_value(),
+            host=self.rabbitmq_host,
+            port=self.rabbitmq_port,
+            path=self.rabbitmq_vhost,
+        )    
 
 @lru_cache
 def get_settings() -> Settings:
