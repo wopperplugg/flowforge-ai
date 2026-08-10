@@ -18,7 +18,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.infrastructure.database.session import Base
 
-
 EMBEDDING_DIMENSION = 768
 
 

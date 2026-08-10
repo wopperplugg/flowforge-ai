@@ -5,9 +5,11 @@ import pytest
 
 from src.messaging.contracts import OutboxMessage
 from src.messaging.task_events import (
+    TASK_DELETED_EVENT,
     TaskEventContractError,
     is_indexable_task_event,
     task_event_to_index_command,
+    validate_task_deleted_event,
 )
 
 
@@ -104,3 +106,30 @@ def test_status_changed_is_not_indexable_content_event() -> None:
     )
 
     assert is_indexable_task_event(event) is False
+
+
+def test_task_deleted_event_requires_organization_id() -> None:
+    event = make_event(
+        event_type=TASK_DELETED_EVENT,
+        payload={
+            "task_id": str(uuid.uuid4()),
+        },
+    )
+
+    with pytest.raises(
+        TaskEventContractError,
+        match="organization_id",
+    ):
+        validate_task_deleted_event(event)
+
+
+def test_task_deleted_event_contract_is_valid_with_organization_id() -> None:
+    event = make_event(
+        event_type=TASK_DELETED_EVENT,
+        organization_id=uuid.uuid4(),
+        payload={
+            "task_id": str(uuid.uuid4()),
+        },
+    )
+
+    validate_task_deleted_event(event)

@@ -16,6 +16,7 @@ INDEXABLE_TASK_EVENTS = frozenset(
 )
 
 TASK_STATUS_CHANGED_EVENT = "task.status_changed"
+TASK_DELETED_EVENT = "task.deleted"
 
 
 def is_indexable_task_event(
@@ -25,6 +26,25 @@ def is_indexable_task_event(
         event.aggregate_type == "task"
         and event.event_type in INDEXABLE_TASK_EVENTS
     )
+
+
+def validate_task_deleted_event(
+    event: OutboxMessage,
+) -> None:
+    if event.aggregate_type != "task":
+        raise TaskEventContractError(
+            f"Unsupported aggregate_type for task deletion: {event.aggregate_type}"
+        )
+
+    if event.event_type != TASK_DELETED_EVENT:
+        raise TaskEventContractError(
+            f"Unsupported task deletion event_type: {event.event_type}"
+        )
+
+    if event.organization_id is None:
+        raise TaskEventContractError(
+            "Task deleted event does not contain organization_id"
+        )
 
 
 def task_event_to_index_command(

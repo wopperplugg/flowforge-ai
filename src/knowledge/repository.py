@@ -80,3 +80,20 @@ class KnowledgeRepository:
                 KnowledgeChunk.source_id == source_id,
             )
         )
+
+    async def delete_source(
+            self,
+            *,
+            organization_id: uuid.UUID,
+            source_type: str,
+            source_entity_id: uuid.UUID,
+    ) -> int:
+        result = await self._session.execute(
+            delete(KnowledgeSource).where(
+                KnowledgeSource.organization_id == organization_id,
+                KnowledgeSource.source_type == source_type,
+                KnowledgeSource.source_entity_id == source_entity_id,
+            )
+        )
+
+        return result.rowcount or 0

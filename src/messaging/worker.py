@@ -11,14 +11,17 @@ from src.infrastructure.database.session import (
     async_session_factory,
     engine,
 )
+from src.knowledge.repository import KnowledgeRepository
 from src.messaging.connection import create_rabbitmq_connection
 from src.messaging.contracts import OutboxMessage
 from src.messaging.factory import create_ingestion_service
 from src.messaging.task_events import (
+    TASK_DELETED_EVENT,
     TASK_STATUS_CHANGED_EVENT,
     TaskEventContractError,
     is_indexable_task_event,
     task_event_to_index_command,
+    validate_task_deleted_event,
 )
 from src.messaging.topology import (
     AI_TASK_QUEUE,
@@ -69,10 +72,24 @@ async def process_event(
         )
         return
 
-    if event.event_type == "task.deleted":
+    if event.event_type == TASK_DELETED_EVENT:
+        validate_task_deleted_event(event)
+
+        async with async_session_factory() as session:
+            repository = KnowledgeRepository(session)
+
+            deleted_count = await repository.delete_source(
+                organization_id=event.organization_id,
+                source_type="task",
+                source_entity_id=event.aggregate_id,
+            )
+
+            await session.commit()
+
         logger.info(
-            "Task deletion is not implemented yet: %s",
+            "Task source deleted: task_id=%s deleted_count=%s",
             event.aggregate_id,
+            deleted_count,
         )
         return
 
