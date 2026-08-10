@@ -4,21 +4,26 @@ import signal
 from collections.abc import Awaitable, Callable
 from typing import Protocol
 
-import aio_pika
 from aio_pika.abc import AbstractIncomingMessage
 from pydantic import ValidationError
 
-from src.config import settings
 from src.infrastructure.database.session import (
     async_session_factory,
     engine,
 )
+from src.messaging.connection import create_rabbitmq_connection
 from src.messaging.contracts import OutboxMessage
+from src.messaging.factory import create_ingestion_service
+from src.messaging.task_events import (
+    TASK_STATUS_CHANGED_EVENT,
+    TaskEventContractError,
+    is_indexable_task_event,
+    task_event_to_index_command,
+)
 from src.messaging.topology import (
     AI_TASK_QUEUE,
     declare_ai_topology,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -36,30 +41,45 @@ class ConsumerQueue(Protocol):
 async def process_event(
     event: OutboxMessage,
 ) -> None:
-    match event.event_type:
-        case "task.created":
-            logger.info(
-                "Task created received: %s",
-                event.aggregate_id,
+    if is_indexable_task_event(event):
+        async with async_session_factory() as session:
+            ingestion_service = create_ingestion_service(
+                session
             )
 
-        case "task.updated":
-            logger.info(
-                "Task updated received: %s",
-                event.aggregate_id,
+            command = task_event_to_index_command(
+                event
             )
 
-        case "task.deleted":
-            logger.info(
-                "Task deleted received: %s",
-                event.aggregate_id,
+            source = await ingestion_service.index_source(
+                command
             )
 
-        case _:
-            logger.debug(
-                "Unsupported event ignored: %s",
-                event.event_type,
+            logger.info(
+                "Task indexed: task_id=%s source_id=%s",
+                event.aggregate_id,
+                source.id,
             )
+        return
+
+    if event.event_type == TASK_STATUS_CHANGED_EVENT:
+        logger.info(
+            "Task status event does not change indexed content: %s",
+            event.aggregate_id,
+        )
+        return
+
+    if event.event_type == "task.deleted":
+        logger.info(
+            "Task deletion is not implemented yet: %s",
+            event.aggregate_id,
+        )
+        return
+
+    logger.debug(
+        "Unsupported event ignored: %s",
+        event.event_type,
+    )
 
 
 async def process_message(
@@ -88,9 +108,18 @@ async def process_message(
     )
 
     try:
-        async with async_session_factory() as session:
-            async with session.begin():
-                await process_event(event)
+        await process_event(event)
+
+    except TaskEventContractError:
+        logger.exception(
+            "Permanent task event contract error: %s",
+            event.event_id,
+        )
+
+        await message.reject(
+            requeue=False,
+        )
+        return
 
     except Exception:
         logger.exception(
@@ -146,9 +175,7 @@ async def consume_until_stopped(
 
 
 async def run_worker() -> None:
-    connection = await aio_pika.connect_robust(
-        settings.rabbitmq_dsn.unicode_string(),
-    )
+    connection = await create_rabbitmq_connection()
 
     await declare_ai_topology(
         connection,

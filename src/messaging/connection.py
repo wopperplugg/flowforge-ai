@@ -1,5 +1,4 @@
 import aio_pika
-
 from aio_pika.abc import AbstractRobustConnection
 
 from src.config import settings

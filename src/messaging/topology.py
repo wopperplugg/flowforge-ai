@@ -1,7 +1,6 @@
 from aio_pika import ExchangeType
 from aio_pika.abc import AbstractRobustConnection
 
-
 EVENTS_EXCHANGE = "flowforge.events"
 
 AI_TASK_QUEUE = "flowforge.ai.tasks"
