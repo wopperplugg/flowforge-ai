@@ -46,17 +46,11 @@ async def process_event(
 ) -> None:
     if is_indexable_task_event(event):
         async with async_session_factory() as session:
-            ingestion_service = create_ingestion_service(
-                session
-            )
+            ingestion_service = create_ingestion_service(session)
 
-            command = task_event_to_index_command(
-                event
-            )
+            command = task_event_to_index_command(event)
 
-            source = await ingestion_service.index_source(
-                command
-            )
+            source = await ingestion_service.index_source(command)
 
             logger.info(
                 "Task indexed: task_id=%s source_id=%s",
@@ -74,12 +68,18 @@ async def process_event(
 
     if event.event_type == TASK_DELETED_EVENT:
         validate_task_deleted_event(event)
+        organization_id = event.organization_id
+
+        if organization_id is None:
+            raise TaskEventContractError(
+                "Task deleted event does not contain organization_id"
+            )
 
         async with async_session_factory() as session:
             repository = KnowledgeRepository(session)
 
             deleted_count = await repository.delete_source(
-                organization_id=event.organization_id,
+                organization_id=organization_id,
                 source_type="task",
                 source_entity_id=event.aggregate_id,
             )
@@ -243,12 +243,7 @@ async def run_worker() -> None:
 def main() -> None:
     logging.basicConfig(
         level=logging.INFO,
-        format=(
-            "%(asctime)s "
-            "%(levelname)s "
-            "%(name)s: "
-            "%(message)s"
-        ),
+        format=("%(asctime)s %(levelname)s %(name)s: %(message)s"),
     )
 
     asyncio.run(

@@ -10,9 +10,7 @@ async def main() -> None:
         model=settings.embedding_model,
     )
 
-    vector = await provider.embed_text(
-        "JWT authentication and refresh tokens"
-    )
+    vector = await provider.embed_text("JWT authentication and refresh tokens")
 
     print("dimension:", len(vector))
     print("first values:", vector[:5])

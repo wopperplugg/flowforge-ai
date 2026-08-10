@@ -32,9 +32,7 @@ def make_message(
         payload=payload,
     )
 
-    return FakeMessage(
-        event.model_dump_json().encode("utf-8")
-    )
+    return FakeMessage(event.model_dump_json().encode("utf-8"))
 
 
 class FakeSessionContext:

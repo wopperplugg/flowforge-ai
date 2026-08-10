@@ -1,0 +1,152 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - "v*"
+  pull_request:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    env:
+      APP_ENVIRONMENT: test
+      APP_DEBUG: "false"
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5434"
+      POSTGRES_DB: flowforgeai
+      POSTGRES_USER: flowforgeai
+      POSTGRES_PASSWORD: flowforgeai
+      RABBITMQ_HOST: localhost
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: flowforge
+      RABBITMQ_PASSWORD: flowforge
+      RABBITMQ_VHOST: /
+      OLLAMA_BASE_URL: http://localhost:11434
+      EMBEDDING_MODEL: nomic-embed-text
+      LLM_MODEL: qwen3:8b
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: flowforgeai
+          POSTGRES_USER: flowforgeai
+          POSTGRES_PASSWORD: flowforgeai
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U flowforgeai -d flowforgeai"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      rabbitmq:
+        image: rabbitmq:4-management
+        env:
+          RABBITMQ_DEFAULT_USER: flowforge
+          RABBITMQ_DEFAULT_PASS: flowforge
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Установить uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Установить зависимости
+        run: uv sync --dev
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Проверить форматирование Ruff
+        run: uv run ruff format --check .
+
+      - name: Проверить типы Mypy
+        run: uv run mypy src tests
+
+      - name: Запустить миграции базы данных
+        run: uv run alembic upgrade head
+
+      - name: Запустить Pytest с coverage
+        run: uv run pytest --cov=src --cov-fail-under=60
+
+      - name: Проверить pre-commit hooks
+        run: uv run pre-commit run --all-files
+
+  security:
+    runs-on: ubuntu-latest
+    needs: quality
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Установить uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Установить зависимости
+        run: uv sync --dev
+
+      - name: Проверить безопасность через Bandit
+        run: uv run bandit -c pyproject.toml -r src
+
+      - name: Проверить уязвимости зависимостей
+        run: uv run pip-audit
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: [quality, security]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Нормализовать имя Docker image
+        run: echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Подготовить Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha,prefix=sha-
+
+      - name: Войти в GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Собрать и при необходимости опубликовать Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

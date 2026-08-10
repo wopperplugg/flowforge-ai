@@ -1,6 +1,8 @@
 import uuid
+from typing import cast
 
 from sqlalchemy import Select, delete, select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.knowledge.models import KnowledgeChunk, KnowledgeSource
@@ -11,27 +13,27 @@ class KnowledgeRepository:
         self._session = session
 
     async def add_source(
-            self,
-            source: KnowledgeSource,
+        self,
+        source: KnowledgeSource,
     ) -> KnowledgeSource:
         self._session.add(source)
         await self._session.flush()
         return source
 
     async def add_chunks(
-            self,
-            chunks: list[KnowledgeChunk],
+        self,
+        chunks: list[KnowledgeChunk],
     ) -> None:
         self._session.add_all(chunks)
         await self._session.flush()
 
     async def search_similar(
-            self,
-            *,
-            organization_id: uuid.UUID,
-            embedding: list[float],
-            limit: int = 5,
-            project_id: uuid.UUID | None = None,
+        self,
+        *,
+        organization_id: uuid.UUID,
+        embedding: list[float],
+        limit: int = 5,
+        project_id: uuid.UUID | None = None,
     ) -> list[KnowledgeChunk]:
         query: Select[tuple[KnowledgeChunk]] = (
             select(KnowledgeChunk)
@@ -71,9 +73,9 @@ class KnowledgeRepository:
         return result
 
     async def delete_chunks(
-            self,
-            *,
-            source_id: uuid.UUID,
+        self,
+        *,
+        source_id: uuid.UUID,
     ) -> None:
         await self._session.execute(
             delete(KnowledgeChunk).where(
@@ -82,18 +84,21 @@ class KnowledgeRepository:
         )
 
     async def delete_source(
-            self,
-            *,
-            organization_id: uuid.UUID,
-            source_type: str,
-            source_entity_id: uuid.UUID,
+        self,
+        *,
+        organization_id: uuid.UUID,
+        source_type: str,
+        source_entity_id: uuid.UUID,
     ) -> int:
-        result = await self._session.execute(
-            delete(KnowledgeSource).where(
-                KnowledgeSource.organization_id == organization_id,
-                KnowledgeSource.source_type == source_type,
-                KnowledgeSource.source_entity_id == source_entity_id,
-            )
+        result = cast(
+            CursorResult[object],
+            await self._session.execute(
+                delete(KnowledgeSource).where(
+                    KnowledgeSource.organization_id == organization_id,
+                    KnowledgeSource.source_type == source_type,
+                    KnowledgeSource.source_entity_id == source_entity_id,
+                )
+            ),
         )
 
         return result.rowcount or 0

@@ -51,25 +51,17 @@ async def main() -> None:
             )
         )
 
-        repository = KnowledgeRepository(
-            session
-        )
+        repository = KnowledgeRepository(session)
 
-        question = (
-            "How are refresh tokens protected?"
-        )
+        question = "How are refresh tokens protected?"
 
-        query_embedding = (
-            await provider.embed_text(question)
-        )
+        query_embedding = await provider.embed_text(question)
 
-        results = (
-            await repository.search_similar(
-                organization_id=organization_id,
-                project_id=project_id,
-                embedding=query_embedding,
-                limit=3,
-            )
+        results = await repository.search_similar(
+            organization_id=organization_id,
+            project_id=project_id,
+            embedding=query_embedding,
+            limit=3,
         )
 
         print("Question:", question)

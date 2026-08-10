@@ -17,7 +17,7 @@ async def handle_task_event(message: IncomingMessage) -> None:
             event.aggregate_id,
         )
         await message.ack()
-        
+
     except (json.JSONDecodeError, ValidationError) as exc:
         print("invalid message:", exc)
 

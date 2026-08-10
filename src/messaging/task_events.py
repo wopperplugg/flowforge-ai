@@ -22,10 +22,7 @@ TASK_DELETED_EVENT = "task.deleted"
 def is_indexable_task_event(
     event: OutboxMessage,
 ) -> bool:
-    return (
-        event.aggregate_type == "task"
-        and event.event_type in INDEXABLE_TASK_EVENTS
-    )
+    return event.aggregate_type == "task" and event.event_type in INDEXABLE_TASK_EVENTS
 
 
 def validate_task_deleted_event(
@@ -61,26 +58,17 @@ def task_event_to_index_command(
         )
 
     if event.organization_id is None:
-        raise TaskEventContractError(
-            "Task event does not contain organization_id"
-        )
+        raise TaskEventContractError("Task event does not contain organization_id")
 
     title = event.payload.get("title")
     description = event.payload.get("description")
     project_id_raw = event.payload.get("project_id")
 
     if not isinstance(title, str) or not title.strip():
-        raise TaskEventContractError(
-            "Task event must contain non-empty title"
-        )
+        raise TaskEventContractError("Task event must contain non-empty title")
 
-    if (
-        description is not None
-        and not isinstance(description, str)
-    ):
-        raise TaskEventContractError(
-            "Task description must be a string"
-        )
+    if description is not None and not isinstance(description, str):
+        raise TaskEventContractError("Task description must be a string")
 
     project_id: UUID | None = None
 
@@ -97,9 +85,7 @@ def task_event_to_index_command(
     ]
 
     if description and description.strip():
-        content_parts.append(
-            f"Описание: {description.strip()}"
-        )
+        content_parts.append(f"Описание: {description.strip()}")
 
     for label, payload_key in (
         ("Статус", "status"),
@@ -109,9 +95,7 @@ def task_event_to_index_command(
         value = event.payload.get(payload_key)
 
         if isinstance(value, str) and value.strip():
-            content_parts.append(
-                f"{label}: {value.strip()}"
-            )
+            content_parts.append(f"{label}: {value.strip()}")
 
     return IndexSourceCommand(
         organization_id=event.organization_id,

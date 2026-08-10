@@ -17,7 +17,7 @@ dependencies = [
     "pydantic-settings>=2.14.2",
     "sqlalchemy>=2.0.51",
     "structlog>=26.1.0",
-    "uvicorn[standard,standart]>=0.52.1",
+    "uvicorn[standard]>=0.52.1",
 ]
 
 [project.scripts]
@@ -29,8 +29,11 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "bandit[toml]>=1.8.0",
     "httpx>=0.28.1",
     "mypy>=2.3.0",
+    "pip-audit>=2.8.0",
+    "pre-commit>=4.3.0",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
@@ -52,6 +55,10 @@ python_version = "3.13"
 strict = true
 warn_unused_configs = true
 ignore_missing_imports = true
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", "alembic"]
+skips = ["B101"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
