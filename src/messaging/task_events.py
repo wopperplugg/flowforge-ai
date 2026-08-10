@@ -102,11 +102,13 @@ def task_event_to_index_command(
         project_id=project_id,
         source_type="task",
         source_entity_id=event.aggregate_id,
+        source_version=event.event_version,
         title=title.strip(),
         content="\n\n".join(content_parts),
         metadata={
             "event_id": str(event.event_id),
             "event_type": event.event_type,
+            "event_version": event.event_version,
             "task_id": str(event.aggregate_id),
         },
     )

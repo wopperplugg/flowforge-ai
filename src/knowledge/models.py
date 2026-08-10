@@ -88,6 +88,13 @@ class KnowledgeSource(Base):
         index=True,
     )
 
+    source_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
+
     embedding_model: Mapped[str | None] = mapped_column(
         String(255),
         nullable=True,

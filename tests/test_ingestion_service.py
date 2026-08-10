@@ -37,6 +37,7 @@ class FakeChunker:
 class FakeSession:
     def __init__(self) -> None:
         self.commit = AsyncMock()
+        self.flush = AsyncMock()
 
 
 class FakeRepository:
@@ -102,9 +103,10 @@ async def test_index_source_creates_source_and_chunks(
     repository.get_source.assert_awaited_once()
     repository.add_source.assert_awaited_once()
     repository.add_chunks.assert_awaited_once()
-    session.commit.assert_awaited_once_with()
+    session.commit.assert_not_awaited()
     assert source.title == "Task title"
     assert source.raw_content == "Hello world"
+    assert source.source_version == 1
     assert source.embedding_model == "test-embedding"
     add_chunks_call = repository.add_chunks.await_args
     assert add_chunks_call is not None
@@ -147,6 +149,7 @@ async def test_index_source_skips_unchanged_existing_source(
     assert source is existing_source
     repository.add_source.assert_not_awaited()
     repository.add_chunks.assert_not_awaited()
+    session.flush.assert_awaited_once_with()
     session.commit.assert_not_awaited()
 
 

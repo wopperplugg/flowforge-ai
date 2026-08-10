@@ -14,6 +14,11 @@ class IndexSourceCommand(BaseModel):
 
     source_entity_id: uuid.UUID | None = None
 
+    source_version: int = Field(
+        default=1,
+        ge=1,
+    )
+
     title: str = Field(
         min_length=1,
         max_length=500,

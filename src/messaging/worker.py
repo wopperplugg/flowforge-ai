@@ -2,7 +2,7 @@ import asyncio
 import logging
 import signal
 from collections.abc import Awaitable, Callable
-from typing import Protocol
+from typing import Protocol, cast
 
 from aio_pika.abc import AbstractIncomingMessage
 from pydantic import ValidationError
@@ -15,6 +15,8 @@ from src.knowledge.repository import KnowledgeRepository
 from src.messaging.connection import create_rabbitmq_connection
 from src.messaging.contracts import OutboxMessage
 from src.messaging.factory import create_ingestion_service
+from src.messaging.repository import ProcessedMessageRepository
+from src.messaging.retry import RetryChannel, publish_retry_or_dlq
 from src.messaging.task_events import (
     TASK_DELETED_EVENT,
     TASK_STATUS_CHANGED_EVENT,
@@ -44,38 +46,86 @@ class ConsumerQueue(Protocol):
 async def process_event(
     event: OutboxMessage,
 ) -> None:
-    if is_indexable_task_event(event):
-        async with async_session_factory() as session:
-            ingestion_service = create_ingestion_service(session)
-
-            command = task_event_to_index_command(event)
-
-            source = await ingestion_service.index_source(command)
-
-            logger.info(
-                "Task indexed: task_id=%s source_id=%s",
-                event.aggregate_id,
-                source.id,
-            )
-        return
-
-    if event.event_type == TASK_STATUS_CHANGED_EVENT:
-        logger.info(
-            "Task status event does not change indexed content: %s",
-            event.aggregate_id,
+    if event.aggregate_type != "task":
+        logger.debug(
+            "Unsupported aggregate ignored: %s",
+            event.aggregate_type,
         )
         return
 
+    index_command = None
+
+    if is_indexable_task_event(event):
+        index_command = task_event_to_index_command(event)
+
     if event.event_type == TASK_DELETED_EVENT:
         validate_task_deleted_event(event)
-        organization_id = event.organization_id
 
-        if organization_id is None:
-            raise TaskEventContractError(
-                "Task deleted event does not contain organization_id"
+    async with async_session_factory() as session:
+        processed_repository = ProcessedMessageRepository(session)
+
+        claimed = await processed_repository.claim_event(event)
+
+        if not claimed:
+            logger.info(
+                "Duplicate AI event ignored: %s",
+                event.event_id,
             )
+            return
 
-        async with async_session_factory() as session:
+        latest_version = await processed_repository.get_latest_aggregate_version(
+            organization_id=event.organization_id,
+            aggregate_type=event.aggregate_type,
+            aggregate_id=event.aggregate_id,
+            exclude_event_id=event.event_id,
+        )
+
+        if latest_version is not None and event.event_version <= latest_version:
+            await session.commit()
+
+            logger.info(
+                "Stale AI event ignored: event_id=%s version=%s latest_version=%s",
+                event.event_id,
+                event.event_version,
+                latest_version,
+            )
+            return
+
+        if is_indexable_task_event(event):
+            assert index_command is not None
+
+            ingestion_service = create_ingestion_service(session)
+
+            source = await ingestion_service.index_source(index_command)
+
+            await session.commit()
+
+            logger.info(
+                "Task indexed: task_id=%s source_id=%s source_version=%s",
+                event.aggregate_id,
+                source.id,
+                source.source_version,
+            )
+            return
+
+        if event.event_type == TASK_STATUS_CHANGED_EVENT:
+            await session.commit()
+
+            logger.info(
+                "Task status event does not change indexed content: %s",
+                event.aggregate_id,
+            )
+            return
+
+        if event.event_type == TASK_DELETED_EVENT:
+            validate_task_deleted_event(event)
+            organization_id = event.organization_id
+
+            if organization_id is None:
+                raise TaskEventContractError(
+                    "Task deleted event does not contain organization_id"
+                )
+
             repository = KnowledgeRepository(session)
 
             deleted_count = await repository.delete_source(
@@ -86,17 +136,20 @@ async def process_event(
 
             await session.commit()
 
-        logger.info(
-            "Task source deleted: task_id=%s deleted_count=%s",
-            event.aggregate_id,
-            deleted_count,
-        )
-        return
+            logger.info(
+                "Task source deleted: task_id=%s deleted_count=%s version=%s",
+                event.aggregate_id,
+                deleted_count,
+                event.event_version,
+            )
+            return
 
-    logger.debug(
-        "Unsupported event ignored: %s",
-        event.event_type,
-    )
+        await session.commit()
+
+        logger.debug(
+            "Unsupported task event ignored: %s",
+            event.event_type,
+        )
 
 
 async def process_message(
@@ -138,15 +191,30 @@ async def process_message(
         )
         return
 
-    except Exception:
+    except Exception as exc:
         logger.exception(
             "Failed to process AI event: %s",
             event.event_id,
         )
 
-        await message.nack(
-            requeue=True,
-        )
+        try:
+            await publish_retry_or_dlq(
+                channel=cast(RetryChannel, message.channel),
+                message=message,
+                error=exc,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to schedule AI event retry: %s",
+                event.event_id,
+            )
+
+            await message.nack(
+                requeue=True,
+            )
+            return
+
+        await message.ack()
         return
 
     await message.ack()

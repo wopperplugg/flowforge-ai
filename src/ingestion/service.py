@@ -44,6 +44,13 @@ class IngestionService:
             )
 
         if existing_source is not None and existing_source.content_hash == content_hash:
+            existing_source.project_id = command.project_id
+            existing_source.title = command.title
+            existing_source.raw_content = normalized_content
+            existing_source.source_metadata = command.metadata
+            existing_source.source_version = command.source_version
+
+            await self._session.flush()
             return existing_source
 
         text_chunks = self._chunker.split(normalized_content)
@@ -70,6 +77,7 @@ class IngestionService:
                 raw_content=normalized_content,
                 source_metadata=command.metadata,
                 content_hash=content_hash,
+                source_version=command.source_version,
                 embedding_model=self._embedding_provider.model_name,
                 last_indexed_at=datetime.now(UTC),
             )
@@ -83,6 +91,7 @@ class IngestionService:
             source.raw_content = normalized_content
             source.source_metadata = command.metadata
             source.content_hash = content_hash
+            source.source_version = command.source_version
             source.embedding_model = self._embedding_provider.model_name
             source.last_indexed_at = datetime.now(UTC)
 
@@ -108,7 +117,5 @@ class IngestionService:
         ]
 
         await self._repository.add_chunks(chunks)
-
-        await self._session.commit()
 
         return source
