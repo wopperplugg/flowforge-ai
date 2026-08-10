@@ -89,7 +89,7 @@ jobs:
         run: uv run alembic upgrade head
 
       - name: Запустить Pytest с coverage
-        run: uv run pytest --cov=src --cov-fail-under=60
+        run: uv run pytest --cov=src --cov-fail-under=70
 
       - name: Проверить pre-commit hooks
         run: uv run pre-commit run --all-files
