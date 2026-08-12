@@ -4,6 +4,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.agents.model import create_chat_model
 
+
 async def main() -> None:
     model = create_chat_model()
 
@@ -14,9 +15,7 @@ async def main() -> None:
                 "a project management application."
             )
         ),
-        HumanMessage(
-            content="What can you help a project manager with?"
-        ),
+        HumanMessage(content="What can you help a project manager with?"),
     ]
 
     response = await model.ainvoke(messages)

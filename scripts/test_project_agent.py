@@ -13,13 +13,9 @@ from src.infrastructure.database.session import async_session_factory
 
 
 async def main() -> None:
-    organization_id = uuid.UUID(
-        "c2128df2-54b9-4a15-87de-f2c788e4a4d3"
-    )
+    organization_id = uuid.UUID("c2128df2-54b9-4a15-87de-f2c788e4a4d3")
 
-    project_id = uuid.UUID(
-        "bad272c0-f3ac-4ae2-8aed-5a298c3cb983"
-    )
+    project_id = uuid.UUID("bad272c0-f3ac-4ae2-8aed-5a298c3cb983")
 
     embedding_provider = OllamaEmbeddingProvider(
         base_url=settings.ollama_base_url,
@@ -35,16 +31,14 @@ async def main() -> None:
         )
 
         agent = create_project_agent(
-            search_tool=search_tool,
+            tools=[search_tool],
         )
 
         result = await agent.ainvoke(
             {
                 "messages": [
                     HumanMessage(
-                        content=(
-                            "How does authentication work in this project?"
-                        )
+                        content=("How does authentication work in this project?")
                     )
                 ]
             }

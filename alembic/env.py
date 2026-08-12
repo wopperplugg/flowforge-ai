@@ -6,6 +6,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
+from src.agents import conversation_models  # noqa: F401
 from src.config import settings
 from src.infrastructure.database.session import Base
 from src.knowledge import models  # noqa: F401

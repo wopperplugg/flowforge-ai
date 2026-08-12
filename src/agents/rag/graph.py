@@ -1,3 +1,5 @@
+from typing import Any
+
 from langgraph.graph import END, START, StateGraph
 
 from src.agents.rag.state import RAGState
@@ -7,11 +9,12 @@ from .nodes import fallback, route_after_grading
 
 def create_rag_graph(
     *,
-    retrieve_node,
-    grade_documents_node,
-    generate_node,
-    rewrite_query_node,
-):
+    retrieve_node: Any,
+    grade_documents_node: Any,
+    generate_node: Any,
+    rewrite_query_node: Any,
+    checkpointer: Any = None,
+) -> Any:
     builder = StateGraph(RAGState)
 
     builder.add_node(
@@ -74,4 +77,4 @@ def create_rag_graph(
         END,
     )
 
-    return builder.compile()
+    return builder.compile(checkpointer=checkpointer)

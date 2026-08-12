@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     embedding_model: str = "nomic-embed-text"
     llm_model: str = "qwen3:8b"
+    flowforge_api_base_url: str = "http://localhost:8000"
+    flowforge_api_timeout_seconds: float = Field(default=30.0, gt=0)
+    assistant_graph_timeout_seconds: float = Field(default=120.0, gt=0)
+    assistant_graph_recursion_limit: int = Field(default=8, ge=2)
 
     @computed_field  # type: ignore[prop-decorator]
     @property

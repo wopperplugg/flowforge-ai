@@ -58,6 +58,19 @@ python_version = "3.13"
 strict = true
 warn_unused_configs = true
 ignore_missing_imports = true
+files = ["src"]
+
+[[tool.mypy.overrides]]
+module = [
+    "test_approval_service",
+    "test_assistant_api",
+    "test_flowforge_api_client",
+    "test_flowforge_tools",
+    "test_project_service",
+    "test_rag_graph",
+    "test_rag_service",
+]
+ignore_errors = true
 
 [tool.bandit]
 exclude_dirs = ["tests", ".venv", "alembic"]
@@ -66,3 +79,10 @@ skips = ["B101"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["src"]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true

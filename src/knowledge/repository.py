@@ -4,6 +4,7 @@ from typing import cast
 from sqlalchemy import Select, delete, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.knowledge.models import KnowledgeChunk, KnowledgeSource
 
@@ -37,6 +38,9 @@ class KnowledgeRepository:
     ) -> list[KnowledgeChunk]:
         query: Select[tuple[KnowledgeChunk]] = (
             select(KnowledgeChunk)
+            .options(
+                selectinload(KnowledgeChunk.source),
+            )
             .where(
                 KnowledgeChunk.organization_id == organization_id,
             )

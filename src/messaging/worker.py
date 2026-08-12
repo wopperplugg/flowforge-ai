@@ -92,7 +92,8 @@ async def process_event(
             return
 
         if is_indexable_task_event(event):
-            assert index_command is not None
+            if index_command is None:
+                raise ValueError("Index command is required for indexable task events")
 
             ingestion_service = create_ingestion_service(session)
 

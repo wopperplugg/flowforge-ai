@@ -1,4 +1,5 @@
 import uuid
+from typing import Any
 
 from langchain.tools import tool
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,12 +9,12 @@ from src.knowledge.repository import KnowledgeRepository
 
 
 def create_search_project_knowledge_tool(
-        *,
-        session: AsyncSession,
-        embedding_provider: EmbeddingProvider,
-        organization_id: uuid.UUID,
-        project_id: uuid.UUID,
-):
+    *,
+    session: AsyncSession,
+    embedding_provider: EmbeddingProvider,
+    organization_id: uuid.UUID,
+    project_id: uuid.UUID,
+) -> Any:
     @tool
     async def search_project_knowledge(
         query: str,
@@ -35,7 +36,7 @@ def create_search_project_knowledge_tool(
             return "No relevant project information was found."
 
         return "\n\n".join(
-            f"[Chunk {chunk.chunk_index}]\n{chunk.content}"
-            for chunk in chunks
+            f"[Chunk {chunk.chunk_index}]\n{chunk.content}" for chunk in chunks
         )
+
     return search_project_knowledge

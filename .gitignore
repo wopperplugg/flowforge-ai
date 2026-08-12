@@ -18,6 +18,7 @@ venv/
 .coverage
 .coverage.*
 htmlcov/
+evals/*_results.jsonl
 
 # Type checking
 .mypy_cache/

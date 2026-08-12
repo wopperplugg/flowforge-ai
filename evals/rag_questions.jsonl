@@ -1,0 +1,30 @@
+{"id":"auth-001","question":"What authentication mechanism is used?","tags":["auth"]}
+{"id":"auth-002","question":"How are refresh sessions handled?","tags":["auth"]}
+{"id":"auth-003","question":"What happens when a refresh token is rotated?","tags":["auth"]}
+{"id":"auth-004","question":"How does logout revoke user sessions?","tags":["auth"]}
+{"id":"db-001","question":"What database does the project use?","tags":["database"]}
+{"id":"db-002","question":"Which tables store project knowledge chunks?","tags":["database","rag"]}
+{"id":"db-003","question":"What pgvector dimension is used for embeddings?","tags":["database","rag"]}
+{"id":"db-004","question":"How are duplicate knowledge sources avoided?","tags":["database","ingestion"]}
+{"id":"rag-001","question":"How does the RAG graph decide to generate an answer?","tags":["rag"]}
+{"id":"rag-002","question":"When does the RAG graph rewrite the query?","tags":["rag"]}
+{"id":"rag-003","question":"What is the maximum number of retrieval requests?","tags":["rag"]}
+{"id":"rag-004","question":"What happens when no relevant documents are found?","tags":["rag"]}
+{"id":"rag-005","question":"How are source references included in answers?","tags":["rag"]}
+{"id":"api-001","question":"Which endpoint should clients call to query the assistant?","tags":["api"]}
+{"id":"api-002","question":"Which headers are required for assistant authentication context?","tags":["api","auth"]}
+{"id":"api-003","question":"How does the assistant call the main FlowForge API?","tags":["api","tools"]}
+{"id":"tools-001","question":"Which assistant tools are read-only?","tags":["tools"]}
+{"id":"tools-002","question":"Which assistant tools require human approval?","tags":["tools","hitl"]}
+{"id":"tools-003","question":"How does the assistant create a task safely?","tags":["tools","hitl"]}
+{"id":"tools-004","question":"How does the assistant update a task safely?","tags":["tools","hitl"]}
+{"id":"tools-005","question":"How does the assistant delete a task safely?","tags":["tools","hitl"]}
+{"id":"messaging-001","question":"What RabbitMQ exchange and queue are used?","tags":["messaging"]}
+{"id":"messaging-002","question":"Which task events does the worker consume?","tags":["messaging"]}
+{"id":"messaging-003","question":"How is message idempotency handled?","tags":["messaging"]}
+{"id":"ingestion-001","question":"How is source text split into chunks?","tags":["ingestion"]}
+{"id":"ingestion-002","question":"How are embeddings generated?","tags":["ingestion","ollama"]}
+{"id":"deployment-001","question":"How do I run the AI API locally?","tags":["deployment"]}
+{"id":"deployment-002","question":"Which port does the AI API use?","tags":["deployment"]}
+{"id":"deployment-003","question":"How does Docker Compose reach the main FlowForge API?","tags":["deployment"]}
+{"id":"quality-001","question":"What test coverage threshold is configured?","tags":["quality"]}

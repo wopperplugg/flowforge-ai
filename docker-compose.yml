@@ -1,4 +1,43 @@
 services:
+  ai-api:
+    build: .
+    container_name: flowforge-ai-api
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: ai-postgres
+      POSTGRES_PORT: 5432
+      RABBITMQ_HOST: host.docker.internal
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      FLOWFORGE_API_BASE_URL: http://host.docker.internal:8000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8001:8000"
+    depends_on:
+      ai-postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ai-worker:
+    build: .
+    container_name: flowforge-ai-worker
+    command: ["python", "-m", "src.messaging.worker"]
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: ai-postgres
+      POSTGRES_PORT: 5432
+      RABBITMQ_HOST: host.docker.internal
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      FLOWFORGE_API_BASE_URL: http://host.docker.internal:8000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      ai-postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
   ai-postgres:
     image: pgvector/pgvector:pg17
     container_name: flowforge-ai-postgres
@@ -29,6 +68,8 @@ services:
   rabbitmq:
     image: rabbitmq:4-management
     container_name: flowforge-rabbitmq
+    profiles:
+      - standalone
     environment:
       RABBITMQ_DEFAULT_USER: flowforge
       RABBITMQ_DEFAULT_PASS: flowforge

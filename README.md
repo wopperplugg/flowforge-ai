@@ -1,240 +1,140 @@
 # FlowForge AI
 
-AI-микросервис для платформы управления проектами **FlowForge**.
+AI-микросервис для FlowForge. Сервис индексирует проектные данные, хранит
+knowledge base в PostgreSQL + pgvector, отвечает на RAG-запросы и предоставляет
+Project Agent с tools для чтения и изменения данных через основной FlowForge API.
 
-Сервис отвечает за подготовку знаний для AI-подсистемы: ingestion текстовых
-источников, генерацию embeddings, хранение chunks в PostgreSQL + pgvector,
-семантический поиск и получение событий из основного FlowForge API через
-RabbitMQ.
+FlowForge AI не владеет бизнес-данными основного продукта. Пользователи,
+организации, проекты, задачи, права доступа и бизнес-правила остаются в
+`flowforge-api`. Любые write-операции AI выполняет только через HTTP API
+основного сервиса и только после human approval.
 
-Основной backend FlowForge остаётся владельцем бизнес-данных и бизнес-правил:
-пользователей, организаций, проектов, задач, комментариев и прав доступа.
+## Что Реализовано
 
-## Возможности
-
-На текущем этапе реализованы:
-
-* асинхронная работа с PostgreSQL через SQLAlchemy 2.x и `asyncpg`;
-* миграции базы данных через Alembic;
-* PostgreSQL 17 с расширением `pgvector`;
-* модели `knowledge_sources` и `knowledge_chunks`;
-* хранение embeddings размерности 768;
-* разбиение текста на chunks;
-* идемпотентное переиндексирование источника по content hash;
-* векторный поиск по организации и опционально по проекту;
-* абстракция embedding-провайдера;
-* генерация embeddings через Ollama;
-* базовый ingestion pipeline;
-* RabbitMQ topology для AI-событий;
-* consumer worker для событий `task.created`, `task.updated`, `task.deleted`;
-* тестовые скрипты для ingestion, vector search, Ollama и RabbitMQ.
-
-В дальнейшем планируется:
-
-* интеграция с основным FlowForge API;
-* полноценная синхронизация задач и проектов через RabbitMQ;
-* RAG pipeline;
-* LangChain;
-* LangGraph;
-* AI-ассистент для работы с проектами;
-* tool calling;
-* изменяющие операции через human-in-the-loop;
-* история диалогов;
-* streaming ответов;
-* evaluation RAG;
-* метрики и distributed tracing.
+- FastAPI API для RAG и Project Agent.
+- PostgreSQL 17 + pgvector для knowledge sources/chunks и assistant memory.
+- Alembic migrations.
+- Ingestion pipeline: chunking, embeddings, idempotent reindex by content hash.
+- Vector search с фильтрацией по `organization_id` и `project_id`.
+- Ollama embeddings и chat model.
+- RAG graph на LangGraph:
+  - retrieval;
+  - per-document grading;
+  - query rewrite;
+  - максимум 2 retrieval-попытки;
+  - fallback answer, если релевантного контекста нет;
+  - sources в ответе.
+- Project Agent:
+  - `search_project_knowledge`;
+  - `get_project`;
+  - `list_tasks`;
+  - `get_task`;
+  - `create_task`;
+  - `update_task`;
+  - `delete_task`.
+- Conversation memory по `thread_id`.
+- Human-in-the-loop approval для write tools.
+- SSE endpoint для streaming-style ответа.
+- RabbitMQ worker для событий задач из FlowForge API.
+- Evaluation dataset для RAG.
+- Tests с coverage threshold 70%.
 
 ## Стек
 
-* Python 3.13
-* FastAPI
-* SQLAlchemy 2.x
-* asyncpg
-* PostgreSQL 17
-* pgvector
-* Alembic
-* Pydantic v2
-* Pydantic Settings
-* aio-pika
-* RabbitMQ
-* Ollama
-* Docker / Docker Compose
-* uv
+- Python 3.13
+- FastAPI
+- LangChain / LangGraph
+- SQLAlchemy 2.x / asyncpg
+- PostgreSQL 17 / pgvector
+- Alembic
+- Pydantic v2 / Pydantic Settings
+- RabbitMQ / aio-pika
+- Ollama
+- Docker / Docker Compose
+- uv
 
 ## Архитектура
 
 ```text
-┌─────────────────────┐
-│   FlowForge API     │
-│                     │
-│ Users               │
-│ Organizations       │
-│ Projects            │
-│ Tasks               │
-│ Permissions         │
-└──────────┬──────────┘
-           │
-           │ publishes domain events
-           ▼
-┌─────────────────────┐
-│ RabbitMQ            │
-│ flowforge.events    │
-│ flowforge.ai.tasks  │
-└──────────┬──────────┘
-           │
-           │ consumes task.*
-           ▼
-┌─────────────────────┐
-│ FlowForge AI        │
-│                     │
-│ Worker              │
-│ Ingestion           │
-│ Embeddings          │
-│ Vector Search       │
-│ RAG                 │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ PostgreSQL          │
-│ + pgvector          │
-└─────────────────────┘
+FlowForge API
+  ├─ owns users / organizations / projects / tasks / permissions
+  ├─ publishes task events to RabbitMQ
+  └─ receives AI write tool HTTP calls after approval
+
+RabbitMQ
+  └─ flowforge.ai.tasks queue
+
+FlowForge AI
+  ├─ FastAPI assistant endpoints
+  ├─ Project Agent tools
+  ├─ RAG graph
+  ├─ ingestion worker
+  └─ assistant memory / approvals / knowledge storage
+
+PostgreSQL + pgvector
+  ├─ knowledge_sources
+  ├─ knowledge_chunks
+  ├─ assistant_threads
+  ├─ assistant_messages
+  └─ assistant_tool_approvals
 ```
 
-FlowForge AI хранит только данные, необходимые AI-подсистеме:
-
-* индексируемые источники;
-* chunks;
-* embeddings;
-* metadata источников и chunks;
-* в дальнейшем - AI conversations, runs и checkpoints.
-
-## Структура проекта
+## Структура
 
 ```text
 flowforge-ai/
 ├── alembic/
-│   ├── env.py
 │   └── versions/
-│       ├── 2fd9755d5381_enable_pgvector_extension.py
-│       ├── 6aec1997cc56_create_knowledge_tables.py
-│       └── de1c0d4107e3_change_embedding_dimension_to_768.py
-│
+├── evals/
+│   └── rag_questions.jsonl
 ├── scripts/
+│   ├── evaluate_rag_api.py
 │   ├── publish_test_event.py
-│   ├── test_ingestion.py
-│   ├── test_ollama_embedding.py
-│   ├── test_rabbitmq.py
-│   └── test_vector_search.py
-│
+│   └── test_*.py
 ├── src/
+│   ├── agents/
+│   │   ├── rag/
+│   │   ├── tools/
+│   │   ├── approval_service.py
+│   │   ├── conversation_models.py
+│   │   ├── conversation_repository.py
+│   │   └── project_service.py
 │   ├── api/
 │   ├── embeddings/
-│   │   ├── base.py
-│   │   └── ollama.py
-│   ├── flowforge_ai/
-│   │   └── __init__.py
-│   ├── infrastructure/
-│   │   └── database/
-│   │       └── session.py
+│   ├── flowforge_api/
 │   ├── ingestion/
-│   │   ├── chunker.py
-│   │   ├── schemas.py
-│   │   └── service.py
 │   ├── knowledge/
-│   │   ├── models.py
-│   │   └── repository.py
 │   ├── messaging/
-│   │   ├── connection.py
-│   │   ├── consumer.py
-│   │   ├── contracts.py
-│   │   ├── topology.py
-│   │   └── worker.py
 │   └── config.py
-│
-├── .env.example
-├── alembic.ini
-├── docker-compose.yml
-├── pyproject.toml
-└── uv.lock
+└── tests/
 ```
 
-## База данных
+## Требования
 
-Сервис использует отдельную PostgreSQL базу с расширением `pgvector`.
+- Python 3.13
+- uv
+- Docker и Docker Compose
+- Ollama
+- Основной сервис `flowforge-api`, если нужны Project Agent tools и E2E
 
-Основные таблицы:
-
-### `knowledge_sources`
-
-Исходные объекты, используемые как источники знаний.
-
-Поля включают организацию, проект, тип источника, id внешней сущности, title,
-raw content, metadata, content hash, embedding model и время последней
-индексации.
-
-Для пары `organization_id`, `source_type`, `source_entity_id` действует
-уникальное ограничение.
-
-### `knowledge_chunks`
-
-Фрагменты исходного текста и соответствующие embeddings.
-
-Каждый chunk связан с `knowledge_source`. Векторные представления хранятся в
-PostgreSQL через `pgvector` с размерностью 768.
-
-## RabbitMQ
-
-Локальный `docker-compose.yml` поднимает RabbitMQ с management UI.
-
-* AMQP: `localhost:5672`
-* Management UI: `http://localhost:15672`
-* Exchange: `flowforge.events`
-* Queue: `flowforge.ai.tasks`
-* Binding key: `task.*`
-
-Worker валидирует входящие сообщения через контракт `OutboxMessage` и сейчас
-обрабатывает события:
-
-* `task.created`
-* `task.updated`
-* `task.deleted`
-
-Остальные события логируются как unsupported и игнорируются.
-
-## Запуск проекта
-
-### Требования
-
-Для локального запуска необходимы:
-
-* Python 3.13;
-* uv;
-* Docker;
-* Docker Compose;
-* Ollama.
-
-### Установка зависимостей
+Модели Ollama:
 
 ```bash
-uv sync
+ollama pull nomic-embed-text
+ollama pull qwen3:8b
 ```
 
-### Переменные окружения
+## Переменные Окружения
 
-Создать `.env` на основе примера:
+Создать `.env`:
 
 ```bash
 cp .env.example .env
 ```
 
-Минимальная конфигурация:
+Минимальные значения для локального запуска AI:
 
 ```dotenv
-APP_NAME=FlowForge AI
-APP_ENVIRONMENT=development
-APP_DEBUG=true
-
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5434
 POSTGRES_DB=flowforgeai
@@ -250,141 +150,330 @@ RABBITMQ_VHOST=/
 OLLAMA_BASE_URL=http://localhost:11434
 EMBEDDING_MODEL=nomic-embed-text
 LLM_MODEL=qwen3:8b
+
+FLOWFORGE_API_BASE_URL=http://localhost:8000
+FLOWFORGE_API_TIMEOUT_SECONDS=30
+
+ASSISTANT_GRAPH_TIMEOUT_SECONDS=120
+ASSISTANT_GRAPH_RECURSION_LIMIT=8
 ```
 
-Файл `.env` не должен добавляться в Git.
+Optional LangSmith tracing:
 
-### Запуск инфраструктуры
+```dotenv
+LANGSMITH_TRACING=false
+LANGSMITH_API_KEY=
+LANGSMITH_PROJECT=flowforge-ai
+```
 
-Запустить PostgreSQL и RabbitMQ:
+## Локальный Запуск
+
+Установить зависимости:
 
 ```bash
-docker compose up -d
+uv sync
 ```
 
-Или только PostgreSQL:
+Поднять AI Postgres:
 
 ```bash
 docker compose up -d ai-postgres
 ```
 
-Или только RabbitMQ:
-
-```bash
-docker compose up -d rabbitmq
-```
-
-Проверить контейнеры:
-
-```bash
-docker compose ps
-```
-
-### Миграции
-
-Применить все миграции:
+Применить миграции:
 
 ```bash
 uv run alembic upgrade head
 ```
 
-Посмотреть текущую ревизию:
+Запустить AI API локально:
 
 ```bash
-uv run alembic current
+uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
-Создать новую миграцию:
-
-```bash
-uv run alembic revision --autogenerate -m "migration message"
-```
-
-### Ollama
-
-Запустить Ollama локально и загрузить embedding model:
-
-```bash
-ollama pull nomic-embed-text
-```
-
-Проверить генерацию embeddings:
-
-```bash
-uv run python -m scripts.test_ollama_embedding
-```
-
-## Worker
-
-Перед запуском worker должны быть доступны PostgreSQL и RabbitMQ, а миграции
-должны быть применены.
-
-Запустить consumer worker:
+Запустить worker локально:
 
 ```bash
 uv run python -m src.messaging.worker
 ```
 
-Проверить соединение и объявление RabbitMQ topology:
+Healthcheck:
+
+```bash
+curl http://localhost:8001/health
+```
+
+## Docker Compose
+
+Обычный compose поднимает AI API, AI worker и AI Postgres. AI API публикуется на
+`localhost:8001`.
+
+```bash
+docker compose up -d --build ai-postgres ai-api ai-worker
+docker compose exec -T ai-api alembic upgrade head
+docker compose ps
+```
+
+В compose AI worker подключается к RabbitMQ основного `flowforge-api` через
+`host.docker.internal:5672`. Поэтому для полного E2E сначала подними основной
+API:
+
+```bash
+cd ~/Desktop/Projects/exam/flowforge-api
+docker compose up -d postgres redis rabbitmq api worker
+docker compose exec -T api alembic upgrade head
+docker compose exec -T api python -m scripts.seed_demo_data
+```
+
+Standalone RabbitMQ внутри этого репозитория нужен только если запускаешь AI без
+основного API:
+
+```bash
+docker compose --profile standalone up -d rabbitmq
+```
+
+## HTTP API
+
+Все assistant endpoints, кроме `/health`, требуют authenticated context:
+
+- `Authorization: Bearer <flowforge-access-token>`
+- `X-User-Id: <uuid>`
+- `X-Organization-Id: <uuid>`
+
+### RAG Query
+
+```bash
+curl -X POST http://localhost:8001/v1/assistant/query \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <flowforge-access-token>" \
+  -H "X-User-Id: <user-id>" \
+  -H "X-Organization-Id: <organization-id>" \
+  -d '{
+    "project_id": "<project-id>",
+    "question": "Kubernetes deployment process and configuration in this project",
+    "thread_id": "local-rag-thread"
+  }'
+```
+
+Response:
+
+```json
+{
+  "answer": "I could not find enough relevant information in the current project knowledge to answer this question.",
+  "thread_id": "local-rag-thread",
+  "query": "...possibly rewritten query...",
+  "rewrite_count": 1,
+  "documents_relevant": false,
+  "sources": []
+}
+```
+
+RAG делает максимум один rewrite. Это дает максимум два retrieval-запроса:
+исходный query и rewritten query. Если релевантных документов нет, endpoint
+возвращает fallback answer.
+
+### Project Agent Query
+
+```bash
+curl -X POST http://localhost:8001/v1/assistant/agent/query \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <flowforge-access-token>" \
+  -H "X-User-Id: <user-id>" \
+  -H "X-Organization-Id: <organization-id>" \
+  -d '{
+    "project_id": "<project-id>",
+    "question": "List tasks in this project",
+    "thread_id": "local-agent-thread",
+    "allow_write_tools": false
+  }'
+```
+
+Read tools выполняются автоматически. Write tools при
+`allow_write_tools=false` создают pending approval и возвращают `approval_id`
+в ответе агента.
+
+### SSE Endpoint
+
+```bash
+curl -N -X POST http://localhost:8001/v1/assistant/agent/stream \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <flowforge-access-token>" \
+  -H "X-User-Id: <user-id>" \
+  -H "X-Organization-Id: <organization-id>" \
+  -d '{
+    "project_id": "<project-id>",
+    "question": "What is the project name?",
+    "thread_id": "local-stream-thread"
+  }'
+```
+
+Events:
+
+```text
+event: start
+data: {}
+
+event: final
+data: {...}
+
+event: done
+data: {}
+```
+
+### Approval Flow
+
+Approve:
+
+```bash
+curl -X POST http://localhost:8001/v1/assistant/approvals/<approval-id>/approve \
+  -H "Authorization: Bearer <flowforge-access-token>" \
+  -H "X-User-Id: <user-id>" \
+  -H "X-Organization-Id: <organization-id>"
+```
+
+Reject:
+
+```bash
+curl -X POST http://localhost:8001/v1/assistant/approvals/<approval-id>/reject \
+  -H "Authorization: Bearer <flowforge-access-token>" \
+  -H "X-User-Id: <user-id>" \
+  -H "X-Organization-Id: <organization-id>"
+```
+
+Execute approved tool call:
+
+```bash
+curl -X POST http://localhost:8001/v1/assistant/approvals/<approval-id>/execute \
+  -H "Authorization: Bearer <flowforge-access-token>" \
+  -H "X-User-Id: <user-id>" \
+  -H "X-Organization-Id: <organization-id>"
+```
+
+`execute` вызывает основной FlowForge API по HTTP. AI-сервис не пишет напрямую
+в PostgreSQL основного API.
+
+## Demo E2E
+
+После `seed_demo_data` в основном API можно использовать demo user:
+
+```text
+email: alice.petrov@flowforge-demo.com
+password: DemoPass123!
+organization_id: 50ab01df-0de5-58cc-9d5d-1ab7d55c3364
+project_id: 1339a14a-ecc3-5660-874d-a406df108d9e
+user_id: 3e20413c-a224-5225-b09c-44ca3803bae4
+```
+
+Получить token:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"alice.petrov@flowforge-demo.com","password":"DemoPass123!"}'
+```
+
+Проверить основной API:
+
+```bash
+curl http://localhost:8000/api/v1/projects/1339a14a-ecc3-5660-874d-a406df108d9e/tasks \
+  -H "Authorization: Bearer <flowforge-access-token>"
+```
+
+Проверить AI Agent:
+
+```bash
+curl -X POST http://localhost:8001/v1/assistant/agent/query \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <flowforge-access-token>" \
+  -H "X-User-Id: 3e20413c-a224-5225-b09c-44ca3803bae4" \
+  -H "X-Organization-Id: 50ab01df-0de5-58cc-9d5d-1ab7d55c3364" \
+  -d '{
+    "project_id": "1339a14a-ecc3-5660-874d-a406df108d9e",
+    "question": "Use the current project_id and call list_tasks. What tasks are in this project?",
+    "thread_id": "e2e-agent-thread",
+    "allow_write_tools": false
+  }'
+```
+
+## RabbitMQ Worker
+
+Worker слушает очередь `flowforge.ai.tasks` и обрабатывает task events:
+
+- `task.created`
+- `task.updated`
+- `task.deleted`
+- `task.status_changed` логируется и не переиндексирует content
+
+Проверить RabbitMQ topology:
 
 ```bash
 uv run python -m scripts.test_rabbitmq
 ```
 
-Опубликовать тестовое событие `task.updated`:
+Опубликовать тестовое событие:
 
 ```bash
 uv run python -m scripts.publish_test_event
 ```
 
-## Smoke-скрипты
+## Evaluation
 
-Проверка ingestion pipeline и семантического поиска:
+Dataset:
 
-```bash
-uv run python -m scripts.test_ingestion
+```text
+evals/rag_questions.jsonl
 ```
 
-Проверка vector search:
+Запуск evaluation через поднятый AI API:
 
 ```bash
-uv run python -m scripts.test_vector_search
+FLOWFORGE_AI_BASE_URL=http://localhost:8001 \
+FLOWFORGE_ACCESS_TOKEN=<flowforge-access-token> \
+FLOWFORGE_USER_ID=<user-id> \
+FLOWFORGE_ORGANIZATION_ID=<organization-id> \
+FLOWFORGE_PROJECT_ID=<project-id> \
+uv run python -m scripts.evaluate_rag_api
 ```
 
-Проверка Ollama embeddings:
+Результат сохраняется в `evals/rag_results.jsonl`. Файл результата
+игнорируется Git.
+
+## Качество И CI
+
+Команды, которые должны проходить локально и в CI:
 
 ```bash
-uv run python -m scripts.test_ollama_embedding
+uv lock --check
+uv run ruff check src tests alembic scripts
+uv run ruff format --check src tests alembic scripts
+uv run mypy src tests
+uv run pytest --cov
+uv run bandit -q -r src
+uv run pip-audit
+uv build
+docker build -t flowforge-ai-ci-check .
 ```
 
-## Качество кода
+Coverage threshold задан в `pyproject.toml`:
 
-Ruff:
-
-```bash
-uv run ruff check .
-uv run ruff format --check .
+```text
+fail_under = 70
 ```
 
-Mypy:
+Актуальный локальный результат:
 
-```bash
-uv run mypy .
+```text
+63 passed
+Total coverage: 76.50%
 ```
 
-Pytest:
+## Production Notes
 
-```bash
-uv run pytest
-```
-
-## Точки расширения
-
-Ближайшие места для развития:
-
-* `src/messaging/worker.py` - обработка событий из основного backend;
-* `src/messaging/contracts.py` - контракт outbox-событий;
-* `src/ingestion/service.py` - индексация источников;
-* `src/knowledge/repository.py` - поиск и операции с knowledge storage;
-* `src/embeddings/base.py` - интерфейс embedding-провайдера;
-* `src/embeddings/ollama.py` - текущая интеграция с Ollama.
+- Для production не запускай `--reload`.
+- `FLOWFORGE_API_BASE_URL` должен указывать на внутренний адрес основного API.
+- Write tools должны оставаться за approval boundary.
+- Secrets не должны попадать в `.env.example`, compose или README.
+- LangSmith tracing включается только при наличии `LANGSMITH_API_KEY`.
+- Ollama latency может быть высокой; API имеет timeout через
+  `ASSISTANT_GRAPH_TIMEOUT_SECONDS`.
